@@ -63,6 +63,56 @@ If using OpenAI `text-embedding-3-small`:
 - `embeddings.model: text-embedding-3-small`
 - `opensearch.embedding_dimension: 1536`
 
+If using watsonx embeddings, set:
+- `embeddings.provider: watsonx`
+- `watsonx_ai.api_key: <IBM Cloud IAM API key>`
+- `watsonx_ai.endpoint: <regional watsonx endpoint>`
+- `watsonx_ai.project_id: <watsonx project GUID>`
+- `watsonx_ai.embedding_model: <model available in your region/project>`
+- `opensearch.embedding_dimension: <must match embedding model output>`
+
+---
+
+## 3.1) watsonx.ai API key and project setup (detailed)
+
+Use this section if embeddings provider is `watsonx`.
+
+1) Create IBM Cloud API key
+- Open IBM Cloud console.
+- Navigate to **Manage -> Access (IAM) -> API keys**.
+- Click **Create** and save the key securely.
+- Put it in `.env` as `IBM_API_KEY` and in config as `watsonx_ai.api_key` (or template it from env during your deployment process).
+
+2) Create/open watsonx project
+- Open watsonx.ai and create a project (or open existing).
+- Confirm the project has access to a Watson Machine Learning service instance.
+- Keep project and endpoint in the same region.
+
+3) Get `project_id`
+- In project details/settings, copy the project GUID.
+- Set `watsonx_ai.project_id` to that exact GUID.
+
+4) Set the correct regional endpoint
+- Example endpoints:
+  - `https://us-south.ml.cloud.ibm.com`
+  - `https://ca-tor.ml.cloud.ibm.com`
+  - `https://eu-de.ml.cloud.ibm.com`
+- Set `watsonx_ai.endpoint` to the endpoint matching your project region.
+
+5) Pick a supported embedding model
+- Set `watsonx_ai.embedding_model` to a model your project can access in that region.
+- If you receive `model_not_supported`, switch to a model available in your region/project.
+
+6) Match OpenSearch vector dimension
+- Set `opensearch.embedding_dimension` to the exact output size of your embedding model.
+- If dimensions do not match, indexing fails even if Spark processing succeeds.
+
+7) Validate with a small run first
+- Use a small PDF set and low executor count.
+- Check logs for:
+  - embeddings client initialization success
+  - non-zero chunk and index counts
+
 ---
 
 ## 4) Access watsonx.data Spark engine
@@ -147,6 +197,10 @@ curl -s -k -u "${OPENSEARCH_USER}:${OPENSEARCH_PASSWORD}" \
 ---
 
 ## 9) Common issues and fixes
+
+Entity extraction note:
+- Entity extraction is currently regex-based baseline.
+- Production alternatives: spaCy, GLiNER, transformer NER, or LLM schema extraction.
 
 ### A) `Python worker exited unexpectedly (EOFException)`
 - usually worker crash / native crash / memory pressure

@@ -1,5 +1,8 @@
 # PDF to OpenSearch Pipeline (Docling + Spark)
 
+![Infrastructure Manager](infra.png)
+
+
 This project turns PDF files into searchable knowledge in OpenSearch.
 
 In plain language:
@@ -9,6 +12,7 @@ In plain language:
 - The pipeline creates smaller text chunks, adds metadata/entities, and generates embeddings.
 - Everything is indexed into OpenSearch for search and retrieval.
 
+![Opensearch Index after ingestion](devtools.png)
 ---
 
 ## Why we chose this approach
@@ -55,6 +59,9 @@ For broader ingestion strategy context, see:
 
 ## How parsing and enrichment works
 
+
+![Spark Application](spark_app.png)
+
 1. Spark reads PDFs using `binaryFile`.
 2. Each executor writes binary content to temp local PDF files.
 3. Docling parses each PDF into structured document elements.
@@ -62,6 +69,13 @@ For broader ingestion strategy context, see:
 5. Entity extraction adds labels to chunks.
 6. Embeddings are generated (provider-configurable).
 7. Normalized chunk documents are bulk-indexed in OpenSearch.
+
+---
+
+## Entity extraction note
+
+- Entity extraction is currently regex-based baseline.
+- Production alternatives: spaCy, GLiNER, transformer NER, or LLM schema extraction.
 
 ---
 
@@ -131,6 +145,46 @@ Example:
 - OpenAI `text-embedding-3-small` -> `1536`
 
 If this is wrong, indexing may fail even when Spark job appears successful.
+
+---
+
+## Using watsonx.ai embeddings  
+
+When `embeddings.provider` is set to `watsonx`, the pipeline calls watsonx.ai embedding APIs for each chunk and stores those vectors in OpenSearch.
+
+Required `watsonx_ai` fields in `config/pipeline_config_saas.yaml`:
+- `watsonx_ai.api_key` (IBM Cloud IAM API key)
+- `watsonx_ai.endpoint` (regional watsonx.ai URL)
+- `watsonx_ai.project_id` (watsonx project GUID)
+- `watsonx_ai.embedding_model` (embedding model available in that project/region)
+
+Step-by-step:
+1. Create an IBM Cloud API key:
+   - Open IBM Cloud console.
+   - Go to **Manage -> Access (IAM) -> API keys**.
+   - Create a new key and copy it immediately.
+2. Create or open a watsonx project:
+   - Open watsonx.ai.
+   - Create a project (or open existing).
+   - Ensure the project is associated with a Watson Machine Learning service instance in the same region.
+3. Get your `project_id`:
+   - In the watsonx project, open project settings/details.
+   - Copy the project GUID and set it as `watsonx_ai.project_id`.
+4. Choose matching regional endpoint:
+   - Use endpoint for the same region as the project (for example `https://us-south.ml.cloud.ibm.com`).
+   - Set it as `watsonx_ai.endpoint`.
+5. Configure model + vector dimension:
+   - Set `watsonx_ai.embedding_model` to a model available in your project region.
+   - Set `opensearch.embedding_dimension` to match the model output dimension exactly.
+6. Run a small validation before full Spark runs:
+   - Start with a tiny PDF sample and low executor count.
+   - Confirm logs show embeddings generated and documents indexed.
+
+Common failure reasons:
+- Endpoint region and project region do not match.
+- Model is not available in your project/region.
+- Missing project-service association (project not properly connected to WML).
+- Embedding dimension in OpenSearch mapping does not match model output.
 
 ---
 
