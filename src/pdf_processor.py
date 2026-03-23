@@ -40,7 +40,9 @@ class PDFProcessor:
         
         # Initialize Docling converter with options
         pipeline_options = PdfPipelineOptions()
-        pipeline_options.do_ocr = True  # Enable OCR for scanned PDFs
+        # OCR is expensive (3-10x slower). Enable only for scanned PDFs.
+        # Controlled by docling.do_ocr in config (default: false).
+        pipeline_options.do_ocr = config.get('docling', {}).get('do_ocr', False)
         pipeline_options.do_table_structure = True  # Extract table structure
         pipeline_options.table_structure_options.do_cell_matching = True
         

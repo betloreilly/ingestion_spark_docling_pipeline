@@ -9,6 +9,28 @@ All other imports and module-level code are deferred inside functions.
 
 from pyspark.sql import SparkSession
 
+# Module-level singleton caches — one instance per executor Python process.
+# Docling's DocumentConverter loads ML models on first init; caching here
+# means models load once per executor, not once per PDF.
+_PDF_PROCESSOR_CACHE = {}
+_EMBEDDINGS_CACHE = {}
+
+
+def _get_pdf_processor(config):
+    """Return (or create) a cached PDFProcessor for this executor process."""
+    if "inst" not in _PDF_PROCESSOR_CACHE:
+        from pdf_processor import PDFProcessor
+        _PDF_PROCESSOR_CACHE["inst"] = PDFProcessor(config)
+    return _PDF_PROCESSOR_CACHE["inst"]
+
+
+def _get_embeddings_client(config):
+    """Return (or create) a cached embeddings client for this executor process."""
+    if "inst" not in _EMBEDDINGS_CACHE:
+        from embeddings import WatsonxEmbeddings
+        _EMBEDDINGS_CACHE["inst"] = WatsonxEmbeddings(config)
+    return _EMBEDDINGS_CACHE["inst"]
+
 
 def create_spark_session(config):
     import logging
@@ -49,12 +71,11 @@ def process_pdf_batch(pdf_items, config):
     import os
     import tempfile
     from datetime import datetime
-    from pdf_processor import PDFProcessor
-    from embeddings import WatsonxEmbeddings
 
     logger = logging.getLogger(__name__)
-    pdf_processor = PDFProcessor(config)
-    embeddings_client = WatsonxEmbeddings(config)
+    # Singletons: models load once per executor process, reused for all PDFs.
+    pdf_processor = _get_pdf_processor(config)
+    embeddings_client = _get_embeddings_client(config)
 
     all_chunks = []
     for item in pdf_items:
@@ -327,8 +348,53 @@ def main():
             .selectExpr("explode(chunks) as chunk")
         )
 
-        processed_chunks = chunks_df.collect()
-        total_chunks = len(processed_chunks)
+        # Broadcast config to executors so they can connect to OpenSearch directly.
+        # This avoids collecting all chunks to the driver — the key scalability fix.
+        config_bc = spark.sparkContext.broadcast(config)
+        indexed_acc = spark.sparkContext.accumulator(0)
+        chunks_acc = spark.sparkContext.accumulator(0)
+
+        # Create index once on the driver to avoid concurrent-creation races
+        # when multiple executor partitions start simultaneously.
+        step("creating OpenSearch index on driver...")
+        indexer_driver = OpenSearchIndexer(config['opensearch'])
+        indexer_driver.create_index_if_not_exists()
+
+        def _index_partition(rows):
+            """Runs on each executor partition: normalize + bulk-index to OpenSearch."""
+            import hashlib
+            from opensearch_indexer import OpenSearchIndexer as _OSI
+            cfg = config_bc.value
+            indexer = _OSI(cfg['opensearch'])
+            docs = []
+            for i, row in enumerate(rows):
+                d = row.asDict(recursive=True) if hasattr(row, "asDict") else dict(row)
+                if "chunk" in d and isinstance(d["chunk"], dict):
+                    d = d["chunk"]
+                d.setdefault("chunk_text", "")
+                d.setdefault("document_name", "unknown")
+                d.setdefault("page_number", 1)
+                d.setdefault("section_title", "Unknown")
+                d.setdefault("chunk_index", i)
+                if not d.get("chunk_id"):
+                    base = (
+                        f"{d.get('document_name','unknown')}|"
+                        f"{d.get('page_number',1)}|"
+                        f"{d.get('chunk_index',i)}|"
+                        f"{d.get('chunk_text','')[:80]}"
+                    )
+                    d["chunk_id"] = hashlib.md5(base.encode("utf-8")).hexdigest()
+                docs.append(d)
+            chunks_acc.add(len(docs))
+            if docs:
+                n = indexer.bulk_index(docs)
+                indexed_acc.add(n)
+
+        step("indexing chunks from executors via foreachPartition...")
+        chunks_df.foreachPartition(_index_partition)
+
+        total_chunks = chunks_acc.value
+        success_count = indexed_acc.value
         step(f"processed {total_chunks} chunks from {pdf_count} PDFs")
         log_lines.append(f"[PIPELINE] chunks: {total_chunks}")
 
@@ -337,23 +403,10 @@ def main():
             _write_log_to_s3(spark, log_lines + ["[PIPELINE] DONE: 0 chunks"], "finished")
             return
 
-        step("indexing to OpenSearch...")
-        indexer = OpenSearchIndexer(config['opensearch'])
-        indexer.create_index_if_not_exists()
-
-        batch_size = config['pipeline']['batch_size']
-        success_count = 0
-        for i in range(0, total_chunks, batch_size):
-            batch = processed_chunks[i:i + batch_size]
-            batch_docs = _normalize_docs_for_index(batch)
-            indexed = indexer.bulk_index(batch_docs)
-            success_count += indexed
-            step(f"indexed batch {i // batch_size + 1}: {indexed}/{len(batch)}")
-
         step(f"indexed {success_count}/{total_chunks} chunks total")
         log_lines.append(f"[PIPELINE] indexed: {success_count}/{total_chunks}")
 
-        index_stats = indexer.get_index_stats()
+        index_stats = indexer_driver.get_index_stats()
         step(f"OpenSearch doc count: {index_stats.get('document_count', 0)}")
 
         step("=" * 60)

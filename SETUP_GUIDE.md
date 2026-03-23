@@ -222,7 +222,29 @@ Entity extraction note:
 
 ---
 
-## 10) Minimal operational runbook
+## 10) Scaling up for large PDF volumes
+
+Before scaling from a small test to production:
+
+1. **Executor count** — increase `spark.executor.instances` in `scripts/payload_main_bootstrap.json`.
+   - Default is 4. Increase based on your PDF volume and engine tier.
+
+2. **OCR** — `docling.do_ocr` in config is `false` by default.
+   - Enable only if PDFs are scanned / image-only. OCR adds 3–10x processing time.
+
+3. **Embedding rate limits** — OpenAI `text-embedding-3-small` has per-minute token limits.
+   - If you have thousands of chunks, reduce `spark.executor.instances` or add retry logic in `src/embeddings.py`.
+
+4. **OpenSearch bulk size** — `opensearch.bulk_size` controls how many docs per bulk request per partition.
+   - Default 500 is safe. Raise to 1000 if your OpenSearch cluster is well-resourced.
+
+5. **Re-ingest behaviour** — chunks are upserted by `chunk_id` (MD5 of document + page + text).
+   - Same file re-ingested = same IDs = existing docs overwritten (no duplicates).
+   - If a PDF shrinks between runs, old extra chunks remain. Delete by `document_name` first if needed.
+
+---
+
+## 11) Minimal operational runbook
 
 For each rerun:
 

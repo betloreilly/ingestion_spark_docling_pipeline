@@ -21,7 +21,7 @@ def install_on_driver(packages=None, quiet=False):
     import subprocess
     pkgs = packages or REQUIRED_PACKAGES
     print(f"[BOOTSTRAP] Installing on driver: {pkgs}", flush=True)
-    cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "--force-reinstall"] + pkgs
+    cmd = [sys.executable, "-m", "pip", "install"] + pkgs
     if quiet:
         cmd.append("-q")
     result = subprocess.run(cmd, capture_output=True, text=True)
@@ -41,7 +41,7 @@ def broadcast_install(spark, packages=None, quiet=False):
 
     def _worker_install(_):
         import subprocess, sys as _sys
-        cmd = [_sys.executable, "-m", "pip", "install", "--upgrade", "--force-reinstall"] + pkgs
+        cmd = [_sys.executable, "-m", "pip", "install"] + pkgs
         if quiet:
             cmd.append("-q")
         r = subprocess.run(cmd, capture_output=True, text=True)

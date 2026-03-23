@@ -64,11 +64,25 @@ For broader ingestion strategy context, see:
 
 1. Spark reads PDFs using `binaryFile`.
 2. Each executor writes binary content to temp local PDF files.
-3. Docling parses each PDF into structured document elements.
+3. Docling parses each PDF into structured document elements (models load once per executor, not once per PDF).
 4. Chunking logic creates manageable search chunks.
 5. Entity extraction adds labels to chunks.
-6. Embeddings are generated (provider-configurable).
-7. Normalized chunk documents are bulk-indexed in OpenSearch.
+6. Embeddings are generated per chunk (provider-configurable).
+7. Each executor partition bulk-indexes its own chunks directly into OpenSearch in parallel — chunks never travel back to the driver.
+
+---
+
+## Scalability design
+
+These decisions allow the pipeline to handle large PDF volumes without driver OOM or serial bottlenecks:
+
+| What | How |
+|---|---|
+| Docling model load | Singleton per executor — loads once, reused for all PDFs on that worker |
+| OpenSearch writes | `foreachPartition` — each executor writes its own chunks in parallel |
+| Chunk memory | Never collected to driver — memory stays flat as PDF count grows |
+| OCR | Off by default (`docling.do_ocr: false`) — enable only for scanned PDFs |
+| Executors | Default 4 (`spark.executor.instances`) — increase for larger batches |
 
 ---
 
@@ -100,6 +114,7 @@ This is the runtime order so new users can understand which code is used where.
 
 5. **Process each PDF on executors** (`src/main.py` + `src/pdf_processor.py`)
    - UDF sends each PDF item to `process_pdf_batch`.
+   - `PDFProcessor` and `WatsonxEmbeddings` are singletons per executor process — Docling models load once, not once per PDF.
    - `PDFProcessor.parse_pdf()` uses Docling to parse structure.
    - `PDFProcessor.chunk_document()` creates semantic chunks.
    - `PDFProcessor.extract_entities()` adds entity labels.
@@ -110,13 +125,10 @@ This is the runtime order so new users can understand which code is used where.
      - watsonx (`embeddings.provider=watsonx`)
    - Adds `chunk_embedding` to each chunk.
 
-7. **Normalize chunk docs for indexing** (`src/main.py`)
-   - Flattens row shape (`chunk` object).
-   - Ensures required fields exist (`chunk_id`, `chunk_text`, metadata).
-
-8. **Index into OpenSearch** (`src/opensearch_indexer.py`)
-   - Creates index if missing (`create_index_if_not_exists`).
-   - Bulk indexes chunk documents (`bulk_index`).
+7. **Index into OpenSearch in parallel** (`src/main.py` + `src/opensearch_indexer.py`)
+   - Index is created once on the driver before partitions start (avoids creation race).
+   - Each executor partition normalises its own chunks and bulk-indexes directly into OpenSearch via `foreachPartition`.
+   - Chunks never collect to the driver — memory use stays flat regardless of PDF volume.
 
 9. **Write run outcome logs** (`src/main.py`)
    - Writes success/failure summary to S3 logs path.
