@@ -1,0 +1,28 @@
+# Core PDF Processing
+docling>=1.0.0
+docling-core>=1.0.0
+
+# IBM watsonx.ai for embeddings
+ibm-watsonx-ai>=0.2.0
+openai>=1.40.0
+
+# OpenSearch client
+opensearch-py>=2.3.0
+
+# Spark (provided by watsonx.data Spark engine)
+# pyspark>=3.4.0  # Commented out - provided by cluster
+
+# Configuration and utilities
+pyyaml>=6.0
+python-dotenv>=1.0.0
+
+# AWS S3 for Cloud Object Storage access
+boto3>=1.28.0
+s3fs>=2023.9.0
+
+# Data processing
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Logging and monitoring
+python-json-logger>=2.0.0

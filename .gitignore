@@ -1,0 +1,34 @@
+# macOS
+.DS_Store
+
+# generated artifacts
+src_bundle.zip
+pipeline.zip
+pipeline.log
+# Local env with secrets (copy from .env.example)
+.env
+
+# Generated payload with live credentials - never commit
+scripts/pipeline_submit.json
+
+# Python
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Logs and local data
+*.log
+logs/
+checkpoints/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+archive/

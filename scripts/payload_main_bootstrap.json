@@ -1,0 +1,43 @@
+{
+  "application_details": {
+    "application": "s3a://boreillyopensearch/src/main.py",
+    "arguments": [
+      "--config",
+      "s3a://boreillyopensearch/config/pipeline_config_saas.yaml"
+    ],
+    "spark_version": "4.0",
+    "conf": {
+      "spark.app.name": "main-bootstrap-test",
+      "spark.hadoop.wxd.apiKey": "__ZEN_API_KEY__",
+      "spark.submit.pyFiles": "s3a://boreillyopensearch/src/src_bundle.zip",
+
+      "spark.hadoop.fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem",
+      "spark.hadoop.fs.s3a.endpoint": "s3.eu-north-1.amazonaws.com",
+      "spark.hadoop.fs.s3a.region": "eu-north-1",
+      "spark.hadoop.fs.s3a.path.style.access": "false",
+      "spark.hadoop.fs.s3a.connection.ssl.enabled": "true",
+      "spark.hadoop.fs.s3a.aws.credentials.provider": "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider",
+      "spark.hadoop.fs.s3a.access.key": "__AWS_ACCESS_KEY_ID__",
+      "spark.hadoop.fs.s3a.secret.key": "__AWS_SECRET_ACCESS_KEY__",
+      "spark.driverEnv.AWS_ACCESS_KEY_ID": "__AWS_ACCESS_KEY_ID__",
+      "spark.driverEnv.AWS_SECRET_ACCESS_KEY": "__AWS_SECRET_ACCESS_KEY__",
+      "spark.driverEnv.AWS_DEFAULT_REGION": "eu-north-1",
+      "spark.driverEnv.OPENAI_API_KEY": "__OPENAI_API_KEY__",
+      "spark.executorEnv.OPENAI_API_KEY": "__OPENAI_API_KEY__",
+      "spark.python.worker.faulthandler.enabled": "true",
+      "spark.sql.execution.pyspark.udf.faulthandler.enabled": "true",
+      "spark.driverEnv.PYTHONFAULTHANDLER": "1",
+      "spark.executorEnv.PYTHONFAULTHANDLER": "1",
+      "spark.driverEnv.TOKENIZERS_PARALLELISM": "false",
+      "spark.executorEnv.TOKENIZERS_PARALLELISM": "false",
+      "spark.driverEnv.OMP_NUM_THREADS": "1",
+      "spark.executorEnv.OMP_NUM_THREADS": "1",
+      "spark.driverEnv.PYTHONPATH": "/home/spark/.local/lib/python3.11/site-packages:/home/spark/.local/lib/python/site-packages",
+      "spark.executorEnv.PYTHONPATH": "/home/spark/.local/lib/python3.11/site-packages:/home/spark/.local/lib/python/site-packages",
+
+      "spark.driver.memory": "8g",
+      "spark.executor.memory": "8g",
+      "spark.executor.instances": "1"
+    }
+  }
+}

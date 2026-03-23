@@ -1,0 +1,172 @@
+# watsonx.data SaaS Configuration Template
+# This configuration is optimized for IBM watsonx.data SaaS platform
+#
+# SECURITY: If you add real credentials here, do not commit this file. Prefer copying to
+# config/my_config.yaml and adding my_config.yaml to .gitignore.
+
+# Spark Configuration (watsonx.data Spark Engine - Public Endpoint)
+# watsonx.data SaaS only exposes REST API endpoints. Submit jobs via the Application endpoint.
+spark:
+  app_name: "PDF-Ingestion-Pipeline-SaaS"
+  # Optional: master URL. Omit for jobs submitted to watsonx.data (platform sets it).
+  # For local runs only, set to: "local[*]"
+  # master: "local[*]"
+  # --- From watsonx.data console (Public Endpoint) ---
+  # Spark engine endpoint (base URL for this engine)
+  spark_engine_endpoint: "https://console-ibm-cator.lakehouse.saas.ibm.com/lakehouse/api/v3/spark_engines/spark16"
+  # Application endpoint (POST here to submit Spark applications)
+  applications_endpoint: "https://console-ibm-cator.lakehouse.saas.ibm.com/lakehouse/api/v3/spark_engines/spark16/applications"
+  port: 443
+  # ---
+  driver_memory: "8g"
+  executor_memory: "8g"
+  executor_instances: 4
+  # Dynamic allocation for cost optimization
+  dynamic_allocation_enabled: true
+  dynamic_allocation_min_executors: 2
+  dynamic_allocation_max_executors: 10
+  
+# Source Configuration
+source:
+  # Storage type: "cos" means S3-compatible object storage (IBM COS or AWS S3), "local" for local files
+  storage_type: "cos"
+  
+  # AWS S3 (Stockholm / eu-north-1)
+  cos_endpoint: "s3.eu-north-1.amazonaws.com"
+  cos_region: "eu-north-1"
+  cos_bucket: "YOUR_S3_BUCKET"
+  cos_prefix: ""
+  # AWS S3 HMAC credentials (IAM user with s3:GetObject/PutObject/ListBucket on this bucket)
+  cos_access_key: "YOUR_AWS_ACCESS_KEY_ID"
+  cos_secret_key: "YOUR_AWS_SECRET_ACCESS_KEY"
+  
+  # Alternative: Local file system (for testing only)
+  # storage_type: "local"
+  # pdf_path: "sample_data/sample_pdfs/"
+  
+  file_pattern: "*.pdf"
+  
+# Docling Configuration
+docling:
+  # Chunk size in tokens (recommended: 256-512 for semantic search)
+  chunk_size: 512
+  # Overlap between chunks (recommended: 10-20% of chunk_size)
+  chunk_overlap: 50
+  # Extract tables as structured data
+  extract_tables: true
+  # Extract and OCR images (requires additional dependencies)
+  extract_images: false
+  # Preserve document structure (headings, sections)
+  preserve_structure: true
+  
+# watsonx.ai Configuration
+# You can use a project in ANY region: set endpoint + project_id to the SAME region.
+# Project must be in the same region as endpoint; associate that project with a WML instance.
+watsonx_ai:
+  api_key: "YOUR_IBM_API_KEY"
+  # Region: pick ONE. Endpoint and project_id must be from the same region.
+  #   ca-tor:  https://ca-tor.ml.cloud.ibm.com
+  #   Dallas (us-south): https://us-south.ml.cloud.ibm.com
+  #   us-east:  https://us-east.ml.cloud.ibm.com
+  #   eu-de:    https://eu-de.ml.cloud.ibm.com
+  #   eu-gb:    https://eu-gb.ml.cloud.ibm.com
+  #   jp-tok:   https://jp-tok.ml.cloud.ibm.com
+  endpoint: "https://us-south.ml.cloud.ibm.com"
+  project_id: "YOUR_WATSONX_PROJECT_ID"
+  
+  # Embedding model (must match a model available in your project/region)
+  # ibm/slate-125m-english-rtrvr (768d) may be deprecated in some regions; use slate-30m if you get 404
+  embedding_model: "ibm/slate-125m-english-rtrvr"
+  embedding_dimension: 1536
+
+  # Batch size for embedding API calls (adjust based on rate limits)
+  batch_size: 32
+  # Maximum retries for API calls
+  max_retries: 3
+  # Timeout in seconds
+  timeout: 60
+
+# Embeddings provider selection
+# provider: "watsonx" (default) or "openai"
+embeddings:
+  provider: "openai"
+  model: "text-embedding-3-small"
+  # OpenAI API key is read from OPENAI_API_KEY env var on driver/executors.
+  # Optional here if you prefer config-based secret injection:
+  # api_key: ""
+  # Optional custom base URL (for Azure/OpenAI-compatible gateways):
+  # base_url: ""
+  embedding_dimension: 1536
+  
+# watsonx.data OpenSearch Configuration
+opensearch:
+  # OpenSearch host (hostname only, no https:// – the client uses use_ssl: true)
+  host: "YOUR_OPENSEARCH_HOST"
+  port: 9200
+  
+  # Authentication credentials from watsonx.data console
+  username: "YOUR_OPENSEARCH_USERNAME"
+  password: "YOUR_OPENSEARCH_PASSWORD"
+  
+  # Index name for PDF documents
+  index_name: "spark_demo_documents_openai"
+  
+  # SSL/TLS settings (required for watsonx.data SaaS)
+  use_ssl: true
+  verify_certs: true
+  
+  # Bulk indexing settings
+  bulk_size: 500
+  bulk_timeout: 300
+  
+  # Index settings
+  number_of_shards: 2
+  number_of_replicas: 1
+  
+  # Must match embedding model dimension (e.g. 384 for slate-30m, 768 for slate-125m)
+  embedding_dimension: 1536
+  # KNN settings for vector search (OpenSearch 2.x / 3.x compatible)
+  knn_algo: "hnsw"
+  knn_space_type: "cosinesimil"
+  knn_engine: "lucene"
+  knn_ef_construction: 512
+  knn_m: 16
+  
+# Pipeline Configuration
+pipeline:
+  # Number of PDFs to process per batch
+  batch_size: 100
+  # Maximum retries for failed operations
+  max_retries: 3
+  # Enable metadata enrichment
+  enable_metadata_enrichment: true
+  # Enable quality checks during processing
+  enable_quality_checks: true
+  # Checkpoint directory (S3 path; must match cos_bucket above)
+  checkpoint_dir: "s3a://boreillyopensearch/checkpoints/"
+  # Log level (DEBUG, INFO, WARNING, ERROR)
+  log_level: "INFO"
+  # Upload driver logs to COS after run/failure for easier debugging
+  log_cos_prefix: "logs/spark"
+  
+# Validation Configuration
+validation:
+  # Enable validation after ingestion
+  enabled: true
+  # Sample size for validation queries
+  sample_size: 10
+  # Minimum similarity threshold for validation
+  min_similarity: 0.7
+
+# watsonx.data SaaS Specific Settings
+saas:
+  region: "ca-tor"
+  # Resource group
+  resource_group: "default"
+  # Enable monitoring and logging
+  enable_monitoring: true
+  # Cost optimization settings
+  auto_scale: true
+  idle_timeout: 300  # seconds
+
+# Made with Bob
